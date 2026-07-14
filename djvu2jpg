@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Функция вывода справки
+show_help() {
+    echo "Использование:"
+    echo "  Конвертировать страницу: djvu2jpg номер_страницы файл.djvu"
+    echo "  Конвертировать ВСЮ книгу: djvu2jpg -a файл.djvu"
+    exit 1
+}
+
+# Проверка количества аргументов
+if [ "$#" -lt 2 ]; then
+    show_help
+fi
+
+# Режим ВСЕЙ книги
+if [ "$1" == "-a" ]; then
+    INPUT="$2"
+    if [ ! -f "$INPUT" ]; then echo "Ошибка: Файл '$INPUT' не найден."; exit 1; fi
+    
+    # Считаем страницы
+    TOTAL_PAGES=$(djvudump "$INPUT" | grep -c "PAGE")
+    if [ "$TOTAL_PAGES" -eq 0 ] || [ -z "$TOTAL_PAGES" ]; then echo "Ошибка: Не удалось определить страницы."; exit 1; fi
+    
+    echo "Найдено страниц: $TOTAL_PAGES. Конвертирую..."
+    BASENAME="${INPUT%.*}"
+    
+    for (( i=1; i<=TOTAL_PAGES; i++ )); do
+        printf -v PAGE_PAD "%03d" "$i"
+        # Используем ppm для сохранения цвета в потоке
+        ddjvu -page="$i" -format=ppm "$INPUT" - | magick - -strip -quality 95 -normalize "${BASENAME}_${PAGE_PAD}.jpg"
+    done
+    echo "Готово! Все страницы сохранены."
+    exit 0
+fi
+
+# Режим ОДНОЙ страницы
+PAGE="$1"
+INPUT="$2"
+
+if [ ! -f "$INPUT" ]; then 
+    echo "Ошибка: Файл '$INPUT' не найден."
+    exit 1
+fi
+
+OUTPUT_JPG="${INPUT%.*}_page_${PAGE}.jpg"
+
+# Конвертация через ppm поток
+ddjvu -page="$PAGE" -format=ppm "$INPUT" - | magick - -strip -quality 95 -normalize "$OUTPUT_JPG"
+
+# Сохраняем статусы конвейера в массив сразу после выполнения
+STATUSES=("${PIPESTATUS[@]}")
+
+# Проверяем статус ddjvu (индекс 0) и статус magick (индекс 1)
+if [ "${STATUSES[0]}" -eq 0 ] && [ "${STATUSES[1]}" -eq 0 ]; then
+    echo "Готово: страница $PAGE из $INPUT сохранена в $OUTPUT_JPG"
+else
+    echo "Ошибка при обработке"
+fi
+
