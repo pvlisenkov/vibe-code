@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# Папка для обработки (по умолчанию текущая)
+TARGET_DIR="."
+
+IFS=$'\n'
+cd "$TARGET_DIR" || exit 1
+
+# Счетчик для файлов с одинаковой секундой изменения
+counter=1
+last_date=""
+
+# Сортируем файлы по дате изменения (от старых к новым) с помощью 'ls -tr'
+for file in $(ls -tr *.jpg *.JPG 2>/dev/null); do
+    [ -f "$file" ] || continue
+    
+    # Получаем дату изменения именно этого файла в формате ГГГГММДД_ЧЧММСС
+    file_date=$(date -r "$file" +"%Y%m%d_%H%M%S")
+    
+    # Если дата совпадает с предыдущим файлом, увеличиваем счетчик
+    if [ "$file_date" == "$last_date" ]; then
+        ((counter++))
+    else
+        counter=1
+        last_date="$file_date"
+    fi
+    
+    # Форматируем счетчик в три знака (001, 002 и т.д.)
+    suffix=$(printf "%03d" $counter)
+    
+    # Создаем новое имя: ДАТА_НОМЕР.jpg
+    new_name="${file_date}_${suffix}.jpg"
+    
+    # Обработка изображения
+    convert "$file" -resize 50% -quality 95 "$new_name"
+    #rm "$file"
+    
+    echo "Обработан: $file -> $new_name (Дата изменения: $(date -r "$new_name" +"%Y-%m-%d %H:%M:%S"))"
+done
+
+echo "Все файлы успешно отсортированы и обработаны!"
+
