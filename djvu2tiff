@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# Проверка: передано ли 3 аргумента
+if [ "$#" -ne 3 ]; then
+    echo "Использование: djvu2tiff номер_страницы файл.djvu выходной.tiff"
+    exit 1
+fi
+
+PAGE="$1"
+INPUT="$2"
+OUTPUT="$3"
+
+# Запуск конвертации
+ddjvu -page="$PAGE" -format=tiff "$INPUT" "$OUTPUT"
+
+if [ $? -eq 0 ]; then
+    echo "Готово: страница $PAGE из $INPUT сохранена в $OUTPUT"
+else
+    echo "Ошибка при обработке файла"
+fi
