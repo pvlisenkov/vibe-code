@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Mini Mario</title>
+<style>
+    body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: monospace; color: #fff; }
+    canvas { background: #5c94fc; image-rendering: pixelated; border: 2px solid #333; }
+    #info { position: absolute; top: 10px; left: 10px; font-size: 14px; text-shadow: 1px 1px 0 #000; }
+</style>
+</head>
+<body>
+<div id="info">Стрелки/WASD — движение, Пробел — прыжок, R — рестарт</div>
+<canvas id="game" width="800" height="480"></canvas>
+<script>
+// =========================================================
+// MINI MARIO — один файл, три уровня, ноль зависимостей
+// =========================================================
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const TILE = 32;           // размер тайла в пикселях
+const GRAVITY = 0.6;
+const JUMP_POWER = -12;
+const MOVE_SPEED = 4;
+const MAX_FALL = 12;
+
+// ---------------------------------------------------------
+// УРОВНИ. Каждый уровень — массив объектов.
+// p = платформа, e = враг, c = монета, f = флаг, s = старт
+// Координаты в тайлах.
+// ---------------------------------------------------------
+const LEVELS = [
+    { // Уровень 1 — обучение
+        width: 80, height: 15,
+        start: {x: 2, y: 11},
+        objects: [
+            // Земля
+            ...makeGround(0, 13, 25),
+            ...makeGround(28, 13, 20),
+            ...makeGround(50, 13, 30),
+            // Платформы
+            {type:'p', x:10, y:10, w:3, h:1},
+            {type:'p', x:16, y:8, w:3, h:1},
+            {type:'p', x:35, y:10, w:4, h:1},
+            {type:'p', x:42, y:8, w:3, h:1},
+            {type:'p', x:60, y:10, w:3, h:1},
+            // Враги
+            {type:'e', x:12, y:12},
+            {type:'e', x:20, y:12},
+            {type:'e', x:38, y:12},
+            {type:'e', x:55, y:12},
+            // Монеты
+            {type:'c', x:11, y:8}, {type:'c', x:12, y:8},
+            {type:'c', x:17, y:6}, {type:'c', x:36, y:8},
+            {type:'c', x:43, y:6}, {type:'c', x:61, y:8},
+            // Флаг
+            {type:'f', x:75, y:10}
+        ]
+    },
+    { // Уровень 2 — пропасти и больше врагов
+        width: 100, height: 15,
+        start: {x: 2, y: 11},
+        objects: [
+            ...makeGround(0, 13, 15),
+            ...makeGround(18, 13, 12),
+            ...makeGround(33, 13, 10),
+            ...makeGround(46, 13, 15),
+            ...makeGround(64, 13, 10),
+            ...makeGround(77, 13, 23),
+            // Платформы над пропастями
+            {type:'p', x:15, y:11, w:2, h:1},
+            {type:'p', x:30, y:10, w:2, h:1},
+            {type:'p', x:43, y:9, w:2, h:1},
+            {type:'p', x:61, y:10, w:2, h:1},
+            {type:'p', x:74, y:11, w:2, h:1},
+            // Высокие платформы
+            {type:'p', x:22, y:8, w:3, h:1},
+            {type:'p', x:50, y:7, w:4, h:1},
+            {type:'p', x:68, y:8, w:3, h:1},
+            // Враги
+            {type:'e', x:8, y:12}, {type:'e', x:12, y:12},
+            {type:'e', x:22, y:12}, {type:'e', x:28, y:12},
+            {type:'e', x:36, y:12}, {type:'e', x:50, y:12},
+            {type:'e', x:56, y:12}, {type:'e', x:80, y:12},
+            {type:'e', x:85, y:12}, {type:'e', x:90, y:12},
+            // Монеты
+            {type:'c', x:16, y:9}, {type:'c', x:31, y:8},
+            {type:'c', x:44, y:7}, {type:'c', x:62, y:8},
+            {type:'c', x:23, y:6}, {type:'c', x:24, y:6},
+            {type:'c', x:51, y:5}, {type:'c', x:52, y:5},
+            {type:'c', x:69, y:6},
+            {type:'f', x:96, y:10}
+        ]
+    },
+    { // Уровень 3 — хардкор
+        width: 120, height: 15,
+        start: {x: 2, y: 11},
+        objects: [
+            ...makeGround(0, 13, 10),
+            ...makeGround(13, 13, 8),
+            ...makeGround(24, 13, 6),
+            ...makeGround(33, 13, 8),
+            ...makeGround(44, 13, 6),
+            ...makeGround(53, 13, 8),
+            ...makeGround(64, 13, 6),
+            ...makeGround(73, 13, 10),
+            ...makeGround(86, 13, 8),
+            ...makeGround(97, 13, 23),
+            // Лестницы из платформ
+            {type:'p', x:10, y:11, w:2, h:1},
+            {type:'p', x:12, y:9, w:2, h:1},
+            {type:'p', x:21, y:11, w:2, h:1},
+            {type:'p', x:23, y:9, w:2, h:1},
+            {type:'p', x:30, y:10, w:2, h:1},
+            {type:'p', x:41, y:11, w:2, h:1},
+            {type:'p', x:43, y:9, w:2, h:1},
+            {type:'p', x:50, y:10, w:2, h:1},
+            {type:'p', x:61, y:11, w:2, h:1},
+            {type:'p', x:63, y:9, w:2, h:1},
+            {type:'p', x:70, y:10, w:2, h:1},
+            {type:'p', x:83, y:11, w:2, h:1},
+            {type:'p', x:85, y:9, w:2, h:1},
+            {type:'p', x:94, y:10, w:2, h:1},
+            // Враги — много
+            {type:'e', x:6, y:12}, {type:'e', x:8, y:12},
+            {type:'e', x:15, y:12}, {type:'e', x:19, y:12},
+            {type:'e', x:26, y:12}, {type:'e', x:35, y:12},
+            {type:'e', x:39, y:12}, {type:'e', x:46, y:12},
+            {type:'e', x:55, y:12}, {type:'e', x:59, y:12},
+            {type:'e', x:66, y:12}, {type:'e', x:75, y:12},
+            {type:'e', x:80, y:12}, {type:'e', x:88, y:12},
+            {type:'e', x:92, y:12}, {type:'e', x:100, y:12},
+            {type:'e', x:105, y:12}, {type:'e', x:110, y:12},
+            // Монеты
+            {type:'c', x:11, y:9}, {type:'c', x:13, y:7},
+            {type:'c', x:22, y:9}, {type:'c', x:24, y:7},
+            {type:'c', x:31, y:8}, {type:'c', x:42, y:9},
+            {type:'c', x:44, y:7}, {type:'c', x:51, y:8},
+            {type:'c', x:62, y:9}, {type:'c', x:64, y:7},
+            {type:'c', x:71, y:8}, {type:'c', x:84, y:9},
+            {type:'c', x:86, y:7}, {type:'c', x:95, y:8},
+            {type:'f', x:116, y:10}
+        ]
+    }
+];
+
+// Генератор земли — массив тайлов-платформ
+function makeGround(x, y, w) {
+    return [{type:'p', x:x, y:y, w:w, h:2}];
+}
+
+// ---------------------------------------------------------
+// ИГРОК
+// ---------------------------------------------------------
+const player = {
+    x: 0, y: 0, w: 24, h: 30,
+    vx: 0, vy: 0,
+    onGround: false,
+    facing: 1,
+    alive: true,
+    walkFrame: 0
+};
+
+// ---------------------------------------------------------
+// СОСТОЯНИЕ ИГРЫ
+// ---------------------------------------------------------
+let currentLevel = 0;
+let lives = 3;
+let coins = 0;
+let platforms = [];
+let enemies = [];
+let coinList = [];
+let flag = null;
+let camera = {x: 0, y: 0};
+let gameState = 'play'; // play, dead, win, gameover, complete
+let stateTimer = 0;
+
+const keys = {};
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code === 'KeyR') restartGame();
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ---------------------------------------------------------
+// ЗАГРУЗКА УРОВНЯ
+// ---------------------------------------------------------
+function loadLevel(idx) {
+    const lvl = LEVELS[idx];
+    platforms = [];
+    enemies = [];
+    coinList = [];
+    flag = null;
+
+    for (const obj of lvl.objects) {
+        if (obj.type === 'p') {
+            platforms.push({
+                x: obj.x * TILE, y: obj.y * TILE,
+                w: (obj.w || 1) * TILE, h: (obj.h || 1) * TILE
+            });
+        } else if (obj.type === 'e') {
+            enemies.push({
+                x: obj.x * TILE, y: obj.y * TILE,
+                w: 28, h: 28,
+                vx: -1.5, alive: true, squishTimer: 0
+            });
+        } else if (obj.type === 'c') {
+            coinList.push({
+                x: obj.x * TILE + 8, y: obj.y * TILE + 8,
+                w: 16, h: 16, collected: false, frame: 0
+            });
+        } else if (obj.type === 'f') {
+            flag = {x: obj.x * TILE, y: obj.y * TILE};
+        }
+    }
+
+    player.x = lvl.start.x * TILE;
+    player.y = lvl.start.y * TILE;
+    player.vx = 0; player.vy = 0;
+    player.alive = true;
+    player.onGround = false;
+    camera.x = 0;
+}
+
+function restartGame() {
+    currentLevel = 0;
+    lives = 3;
+    coins = 0;
+    gameState = 'play';
+    loadLevel(0);
+}
+
+function nextLevel() {
+    currentLevel++;
+    if (currentLevel >= LEVELS.length) {
+        gameState = 'complete';
+    } else {
+        loadLevel(currentLevel);
+        gameState = 'play';
+    }
+}
+
+// ---------------------------------------------------------
+// ФИЗИКА И КОЛЛИЗИИ
+// ---------------------------------------------------------
+function rectOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x &&
+           a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function moveAndCollide(entity, dx, dy) {
+    // Движение по X
+    entity.x += dx;
+    for (const p of platforms) {
+        if (rectOverlap(entity, p)) {
+            if (dx > 0) entity.x = p.x - entity.w;
+            else if (dx < 0) entity.x = p.x + p.w;
+            if (entity.vx !== undefined) entity.vx *= -1;
+        }
+    }
+    // Движение по Y
+    entity.y += dy;
+    entity.onGround = false;
+    for (const p of platforms) {
+        if (rectOverlap(entity, p)) {
+            if (dy > 0) {
+                entity.y = p.y - entity.h;
+                entity.vy = 0;
+                entity.onGround = true;
+            } else if (dy < 0) {
+                entity.y = p.y + p.h;
+                entity.vy = 0;
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------
+// ОБНОВЛЕНИЕ
+// ---------------------------------------------------------
+function update() {
+    if (gameState === 'play') {
+        updatePlayer();
+        updateEnemies();
+        updateCoins();
+        checkFlag();
+        updateCamera();
+        if (!player.alive) {
+            gameState = 'dead';
+            stateTimer = 90;
+        }
+    } else if (gameState === 'dead' || gameState === 'win') {
+        stateTimer--;
+        if (stateTimer <= 0) {
+            if (gameState === 'dead') {
+                lives--;
+                if (lives <= 0) {
+                    gameState = 'gameover';
+                } else {
+                    loadLevel(currentLevel);
+                    gameState = 'play';
+                }
+            } else if (gameState === 'win') {
+                nextLevel();
+            }
+        }
+    }
+}
+
+function updatePlayer() {
+    // Управление
+    let moveX = 0;
+    if (keys['ArrowLeft'] || keys['KeyA']) { moveX = -MOVE_SPEED; player.facing = -1; }
+    if (keys['ArrowRight'] || keys['KeyD']) { moveX = MOVE_SPEED; player.facing = 1; }
+    if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW']) && player.onGround) {
+        player.vy = JUMP_POWER;
+        player.onGround = false;
+    }
+
+    player.vx = moveX;
+    player.vy += GRAVITY;
+    if (player.vy > MAX_FALL) player.vy = MAX_FALL;
+
+    moveAndCollide(player, player.vx, 0);
+    moveAndCollide(player, 0, player.vy);
+
+    // Анимация ходьбы
+    if (Math.abs(player.vx) > 0 && player.onGround) {
+        player.walkFrame = (player.walkFrame + 0.2) % 4;
+    } else {
+        player.walkFrame = 0;
+    }
+
+    // Падение в пропасть
+    if (player.y > LEVELS[currentLevel].height * TILE + 100) {
+        player.alive = false;
+    }
+
+    // Столкновение с врагами
+    for (const e of enemies) {
+        if (!e.alive) continue;
+        if (rectOverlap(player, e)) {
+            // Прыжок сверху — убиваем врага
+            if (player.vy > 0 && player.y + player.h - e.y < 15) {
+                e.alive = false;
+                e.squishTimer = 20;
+                player.vy = JUMP_POWER * 0.6;
+            } else {
+                player.alive = false;
+            }
+        }
+    }
+}
+
+function updateEnemies() {
+    for (const e of enemies) {
+        if (!e.alive) {
+            if (e.squishTimer > 0) e.squishTimer--;
+            continue;
+        }
+        // Простой AI: ходит туда-сюда, разворачивается у стен/краёв
+        const prevX = e.x;
+        moveAndCollide(e, e.vx, 0);
+        moveAndCollide(e, 0, GRAVITY * 3);
+        // Если не сдвинулся — упёрся в стену
+        if (Math.abs(e.x - prevX) < 0.1) e.vx *= -1;
+    }
+}
+
+function updateCoins() {
+    for (const c of coinList) {
+        if (c.collected) continue;
+        c.frame = (c.frame + 0.15) % 4;
+        if (rectOverlap(player, c)) {
+            c.collected = true;
+            coins++;
+        }
+    }
+}
+
+function checkFlag() {
+    if (!flag) return;
+    const flagRect = {x: flag.x + 8, y: flag.y, w: 16, h: TILE * 3};
+    if (rectOverlap(player, flagRect)) {
+        gameState = 'win';
+        stateTimer = 90;
+    }
+}
+
+function updateCamera() {
+    const lvl = LEVELS[currentLevel];
+    const targetX = player.x - canvas.width / 2 + player.w / 2;
+    camera.x = Math.max(0, Math.min(targetX, lvl.width * TILE - canvas.width));
+}
+
+// ---------------------------------------------------------
+// РЕНДЕР
+// ---------------------------------------------------------
+function draw() {
+    // Небо
+    ctx.fillStyle = '#5c94fc';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Облака (параллакс)
+    drawClouds();
+
+    ctx.save();
+    ctx.translate(-Math.floor(camera.x), 0);
+
+    // Платформы (земля и блоки)
+    for (const p of platforms) drawPlatform(p);
+
+    // Монеты
+    for (const c of coinList) if (!c.collected) drawCoin(c);
+
+    // Враги
+    for (const e of enemies) drawEnemy(e);
+
+    // Флаг
+    if (flag) drawFlag(flag);
+
+    // Игрок
+    if (player.alive || gameState === 'dead') drawPlayer();
+
+    ctx.restore();
+
+    // UI
+    drawUI();
+
+    // Оверлеи состояний
+    if (gameState === 'dead') drawOverlay('OUCH!', '#f00');
+    if (gameState === 'win') drawOverlay('LEVEL CLEAR!', '#0f0');
+    if (gameState === 'gameover') drawOverlay('GAME OVER\nR — заново', '#f00');
+    if (gameState === 'complete') drawOverlay('YOU WIN!\nВсе уровни пройдены\nR — заново', '#ff0');
+}
+
+function drawClouds() {
+    ctx.fillStyle = '#fff';
+    const offset = camera.x * 0.3;
+    for (let i = 0; i < 8; i++) {
+        const cx = (i * 250 - offset) % (canvas.width + 200);
+        const cy = 60 + (i % 3) * 30;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+        ctx.arc(cx + 20, cy - 5, 25, 0, Math.PI * 2);
+        ctx.arc(cx + 45, cy, 20, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function drawPlatform(p) {
+    // Кирпичный блок
+    ctx.fillStyle = '#c84c0c';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#e09050';
+    ctx.fillRect(p.x + 2, p.y + 2, p.w - 4, 4);
+    // Линии кирпичей
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    for (let row = 0; row < p.h / TILE; row++) {
+        const y = p.y + row * TILE;
+        ctx.strokeRect(p.x, y, p.w, TILE);
+        // Вертикальные швы со сдвигом
+        const offset = (row % 2) * TILE / 2;
+        for (let x = offset; x < p.w; x += TILE) {
+            ctx.beginPath();
+            ctx.moveTo(p.x + x, y);
+            ctx.lineTo(p.x + x, y + TILE);
+            ctx.stroke();
+        }
+    }
+}
+
+function drawCoin(c) {
+    const w = Math.abs(Math.cos(c.frame * Math.PI / 2)) * c.w;
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(c.x + (c.w - w) / 2, c.y, w, c.h);
+    ctx.fillStyle = '#b8860b';
+    ctx.fillRect(c.x + (c.w - w) / 2 + 2, c.y + 2, Math.max(1, w - 4), 2);
+}
+
+function drawEnemy(e) {
+    if (!e.alive) {
+        if (e.squishTimer > 0) {
+            // Сплющенный враг
+            ctx.fillStyle = '#8b4513';
+            ctx.fillRect(e.x, e.y + e.h - 8, e.w, 8);
+        }
+        return;
+    }
+    // Тело
+    ctx.fillStyle = '#8b4513';
+    ctx.fillRect(e.x, e.y + 4, e.w, e.h - 4);
+    ctx.fillStyle = '#654321';
+    ctx.fillRect(e.x + 2, e.y + 6, e.w - 4, 4);
+    // Ноги
+    ctx.fillStyle = '#000';
+    const legOffset = Math.floor(Date.now() / 200) % 2 === 0 ? 0 : 2;
+    ctx.fillRect(e.x + 2, e.y + e.h - 4, 8, 4);
+    ctx.fillRect(e.x + e.w - 10 + legOffset, e.y + e.h - 4, 8, 4);
+    // Глаза
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(e.x + 5, e.y + 10, 5, 6);
+    ctx.fillRect(e.x + e.w - 10, e.y + 10, 5, 6);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(e.x + 7, e.y + 12, 2, 3);
+    ctx.fillRect(e.x + e.w - 8, e.y + 12, 2, 3);
+}
+
+function drawFlag(f) {
+    // Шест
+    ctx.fillStyle = '#888';
+    ctx.fillRect(f.x + 14, f.y - TILE * 2, 4, TILE * 5);
+    // Шар наверху
+    ctx.fillStyle = '#0a0';
+    ctx.beginPath();
+    ctx.arc(f.x + 16, f.y - TILE * 2, 6, 0, Math.PI * 2);
+    ctx.fill();
+    // Флажок
+    ctx.fillStyle = '#f00';
+    ctx.beginPath();
+    ctx.moveTo(f.x + 18, f.y - TILE * 2 + 5);
+    ctx.lineTo(f.x + 40, f.y - TILE * 2 + 12);
+    ctx.lineTo(f.x + 18, f.y - TILE * 2 + 20);
+    ctx.fill();
+}
+
+function drawPlayer() {
+    const x = player.x, y = player.y;
+    const f = player.facing;
+    // Шапка
+    ctx.fillStyle = '#e52521';
+    ctx.fillRect(x + 4, y, 16, 6);
+    ctx.fillRect(x + 2, y + 4, 20, 4);
+    // Лицо
+    ctx.fillStyle = '#fdbf60';
+    ctx.fillRect(x + 4, y + 8, 16, 8);
+    // Глаза
+    ctx.fillStyle = '#000';
+    if (f > 0) {
+        ctx.fillRect(x + 14, y + 10, 3, 4);
+    } else {
+        ctx.fillRect(x + 7, y + 10, 3, 4);
+    }
+    // Усы
+    ctx.fillRect(x + 6, y + 14, 12, 2);
+    // Комбинезон (синий)
+    ctx.fillStyle = '#1565c0';
+    ctx.fillRect(x + 2, y + 16, 20, 10);
+    // Красная рубашка (рукава)
+    ctx.fillStyle = '#e52521';
+    ctx.fillRect(x, y + 16, 4, 8);
+    ctx.fillRect(x + 20, y + 16, 4, 8);
+    // Пуговицы
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(x + 8, y + 20, 2, 2);
+    ctx.fillRect(x + 14, y + 20, 2, 2);
+    // Ноги — анимация
+    ctx.fillStyle = '#6d4c41';
+    const walk = Math.floor(player.walkFrame);
+    if (!player.onGround) {
+        // В прыжке — ноги разведены
+        ctx.fillRect(x + 2, y + 26, 8, 4);
+        ctx.fillRect(x + 14, y + 26, 8, 4);
+    } else if (walk === 1 || walk === 3) {
+        ctx.fillRect(x + 2, y + 26, 8, 4);
+        ctx.fillRect(x + 16, y + 26, 6, 4);
+    } else {
+        ctx.fillRect(x + 4, y + 26, 6, 4);
+        ctx.fillRect(x + 14, y + 26, 6, 4);
+    }
+}
+
+function drawUI() {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, canvas.width, 36);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 18px monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`WORLD ${currentLevel + 1}-1`, 20, 10);
+    ctx.fillText(`COINS: ${coins}`, 200, 10);
+    ctx.fillText(`LIVES: ${lives}`, 400, 10);
+}
+
+function drawOverlay(text, color) {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = color;
+    ctx.font = 'bold 48px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const lines = text.split('\n');
+    lines.forEach((line, i) => {
+        ctx.fillText(line, canvas.width / 2, canvas.height / 2 + (i - (lines.length - 1) / 2) * 60);
+    });
+    ctx.textAlign = 'left';
+}
+
+// ---------------------------------------------------------
+// ГЛАВНЫЙ ЦИКЛ
+// ---------------------------------------------------------
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+loadLevel(0);
+loop();
+</script>
+</body>
+</html>
