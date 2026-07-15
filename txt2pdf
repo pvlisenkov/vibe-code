@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# Проверяем наличие утилит
+if ! command -v pandoc &> /dev/null || ! command -v lualatex &> /dev/null; then
+    echo "Ошибка: Не найдены утилиты 'pandoc' или 'lualatex'."
+    echo "Установите их: sudo apt install pandoc texlive-luatex fonts-dejavu"
+    exit 1
+fi
+
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    echo "Использование: $0 <inputfile.txt> [outputfile.pdf]"
+    exit 1
+fi
+
+INPUT_FILE="$1"
+
+if [ "$#" -eq 1 ]; then
+    OUTPUT_FILE="${INPUT_FILE%.*}.pdf"
+else
+    OUTPUT_FILE="$2"
+fi
+
+if [ ! -f "$INPUT_FILE" ]; then
+    echo "❌ Ошибка: Файл '$INPUT_FILE' не найден."
+    exit 1
+fi
+
+if [ ! -s "$INPUT_FILE" ]; then
+    echo "❌ Ошибка: Файл '$INPUT_FILE' пуст (0 байт)."
+    exit 1
+fi
+
+echo "Конвертация: '$INPUT_FILE' -> '$OUTPUT_FILE'"
+
+# -f markdown-raw_html: ключевой параметр. Заставляет pandoc читать файл как текст 
+# и НЕ интерпретировать HTML-теги (они останутся видимыми в итоговом PDF).
+# lualatex + DejaVu Sans Mono: гарантируют 100% корректное отображение кириллицы и эмодзи.
+if pandoc "$INPUT_FILE" -f markdown-raw_html -o "$OUTPUT_FILE" \
+    --pdf-engine=lualatex \
+    -V mainfont="DejaVu Sans" \
+    -V monofont="DejaVu Sans Mono" \
+    -V fontsize=9pt \
+    -V geometry:margin=15mm; then
+    
+    echo "✅ Готово! Файл успешно сохранен: $OUTPUT_FILE"
+else
+    echo "❌ Ошибка при конвертации."
+    exit 1
+fi

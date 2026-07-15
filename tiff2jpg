@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# Проверяем, передан ли файл
+if [ -z "$1" ]; then
+    echo "Использование: tiff2jpg файл.tiff"
+    exit 1
+fi
+
+# Проверяем, существует ли файл
+if [ ! -f "$1" ]; then
+    echo "Ошибка: Файл '$1' не найден."
+    exit 1
+fi
+
+# Сама конвертация
+magick "$1" -strip -quality 95 -normalize "${1%.*}.jpg"
+
+if [ $? -eq 0 ]; then
+    echo "Конвертация завершена: ${1%.*}.jpg"
+fi
