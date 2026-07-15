@@ -1,0 +1,21 @@
+#!/bin/bash
+
+if [ "$#" -ne 3 ]; then
+    echo "Использование: $0 <файл.pdf> <номер_страницы> <выходной_файл.jpg>"
+    exit 1
+fi
+
+INPUT_PDF="$1"
+PAGE_NUM="$2"
+OUTPUT_JPG="$3"
+
+# Используем формат PPM для передачи данных — это надежнее и быстрее
+pdftoppm -f "$PAGE_NUM" -l "$PAGE_NUM" -r 300 "$INPUT_PDF" | \
+magick - -strip -quality 95 -normalize "$OUTPUT_JPG"
+
+if [ $? -eq 0 ]; then
+    echo "Успешно: Страница $PAGE_NUM сохранена в $OUTPUT_JPG"
+else
+    echo "Ошибка при обработке файла"
+fi
+
